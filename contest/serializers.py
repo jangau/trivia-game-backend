@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from contest.models import Question, Answer, Quiz
+from contest.models import Question, Answer, Quiz, Game
 
 
 class SimpleAnswerSerializer(serializers.ModelSerializer):

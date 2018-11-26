@@ -172,8 +172,8 @@ class AnswerDetail(APIView):
 
 
 @api_view(['POST'])
-def start_quiz(request):
-    quiz_id = request.data.get('quiz_id')
+def start_game_session(request):
+    quiz_id = request.data.get('session_id')
     channel_layer = get_channel_layer()
 
     try:
