@@ -10,7 +10,7 @@ urlpatterns = [
     path('questions/<int:pk>/', api_views.QuestionDetail.as_view(), name='question-detail'),
     path('answers/', api_views.AnswersList.as_view()),
     path('answers/<int:pk>/', api_views.AnswerDetail.as_view(), name='answer-detail'),
-    path('start-game/', api_views.start_quiz, name='start-game')
+    path('start-game/', api_views.start_game_session, name='start-game')
 ]
 
 urlpatterns = format_suffix_patterns(urlpatterns)

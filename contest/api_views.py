@@ -1,14 +1,18 @@
+import json
+
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from rest_framework.decorators import api_view
 from rest_framework.generics import ListAPIView
 
-from contest.models import Question, Answer, Quiz
+from contest.models import Question, Answer, Quiz, GameSession, Team
 from contest.serializers import QuestionSerializer, AnswerSerializer, QuizSerializer, SimpleAnswerSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.http import Http404
+
+from contest.utils import create_duel_games, register_teams
 
 
 class QuizzesList(APIView):
@@ -173,7 +177,13 @@ class AnswerDetail(APIView):
 
 @api_view(['POST'])
 def start_game_session(request):
-    quiz_id = request.data.get('session_id')
+    quiz_id = request.data.get('quiz_id')
+    teams_str = request.data.get('teams')
+
+    teams = Team.objects.filter(
+        name__in=teams_str
+    )
+
     channel_layer = get_channel_layer()
 
     try:
@@ -181,23 +191,24 @@ def start_game_session(request):
     except Quiz.DoesNotExist:
         raise Http404
 
-    question = Question.objects.filter(quiz=quiz).order_by('order').first()
-    quiz.question_order = question.order
+    # Create a game session with the selected quiz
+    gs = GameSession(
+        quiz=quiz,
+        questions_removed=json.dumps([]),
+    )
+    gs.save()
 
-    if quiz.type == 1:
-        # Only send to one team, at a time
-        quiz.team_order = 1
-        quiz.save()
+    registered_teams = register_teams(teams, gs)
 
-    answers = SimpleAnswerSerializer(question.answer_set, many=True)
+    game1 = create_duel_games(registered_teams, gs)
 
     async_to_sync(channel_layer.group_send)(
         'game_master',
         {
-            'type': 'send.question',
-            'question_text': question.question_text,
-            'answers': answers.data,
-            'to': quiz.team_order
+            'type': 'register.devices',
+            'teams': [game1.first_team.team.name,
+                      game1.second_team.team.name],
+            'game': game1.id
         }
     )
 

@@ -8,22 +8,30 @@ ANSWER_LABELS = [
     (4, 'd')
 ]
 
-QUIZ_TYPES = [
-    (1, 'Normal/sequential'),
-    (2, 'Timed')
+
+DUEL_GAME_STATES = [
+    (0, 'Not started'),
+    (1, 'Player 1 select category'),
+    (2, 'Player 1 answer'),
+    (3, 'Player 2 select category'),
+    (4, 'Player 2 answers'),
+    (5, 'Finished')
 ]
 
 
 class Quiz(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100)
-    type = models.IntegerField(choices=QUIZ_TYPES)
 
 
 class Question(models.Model):
     id = models.AutoField(primary_key=True)
     question_text = models.TextField()
     quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE)
+    category = models.CharField(max_length=100)
+
+    def __str__(self):
+        return "{}: {}".format(self.category, self.question_text[:200])
 
 
 class Answer(models.Model):
@@ -31,18 +39,23 @@ class Answer(models.Model):
     number = models.IntegerField(choices=ANSWER_LABELS)
     question = models.ForeignKey(Question, on_delete=models.CASCADE)
     answer_text = models.CharField(max_length=150)
-    category = models.CharField(max_length=20)
     is_correct = models.NullBooleanField(default=None)
 
     class Meta:
         unique_together = (('number', 'question'),
                            ('question', 'is_correct'))
 
+    def __str__(self):
+        return "Q{}/{}: {}".format(self.question_id,
+                                   self.get_number_display(), self.answer_text[:50])
+
 
 class Team(models.Model):
     id = models.AutoField(primary_key=True)
-    device = models.CharField(unique=True, max_length=50)
     name = models.CharField(unique=True, max_length=50)
+
+    def __str__(self):
+        return self.name
 
 
 class AnswerReceived(models.Model):
@@ -52,21 +65,35 @@ class AnswerReceived(models.Model):
     answer = models.ForeignKey(Answer, on_delete=models.CASCADE)
 
 
-class Game(models.Model):
+class GameSession(models.Model):
     id = models.AutoField(primary_key=True)
-    step = models.IntegerField(default=1)
+    quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE)
+    winner = models.ForeignKey(Team, on_delete=models.CASCADE, null=True, blank=True)
+    questions_removed = models.CharField(max_length=300)
+    games_order = models.IntegerField(default=1)
 
 
 class GameTeam(models.Model):
     id = models.AutoField(primary_key=True)
     team = models.ForeignKey(Team, on_delete=models.CASCADE)
-    game = models.ForeignKey(Game, on_delete=models.CASCADE)
-    score_phase_1 = models.IntegerField(default=0)
-    score_phase_2 = models.IntegerField(default=0)
+    game_session = models.ForeignKey(GameSession, on_delete=models.CASCADE)
+    device_registered = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = (('team', 'game_session'),)
 
 
-class GameSession(models.Model):
+class DuelGame(models.Model):
     id = models.AutoField(primary_key=True)
-    quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE)
-    winner = models.ForeignKey(Team, on_delete=models.CASCADE)
-    questions_removed = models.CharField(max_length=300)
+    session = models.ForeignKey(GameSession, on_delete=models.CASCADE)
+    step = models.IntegerField(default=1)
+    categories_removed = models.CharField(max_length=1000, default='[]')
+    first_team = models.ForeignKey(GameTeam, on_delete=models.CASCADE,
+                                   related_name='first_team')
+    first_team_score = models.IntegerField(default=0)
+    second_team = models.ForeignKey(GameTeam, on_delete=models.CASCADE,
+                                    related_name='second_team')
+    second_team_score = models.IntegerField(default=0)
+    first_player_turn = models.BooleanField(default=True)
+    state = models.IntegerField(default=0, choices=DUEL_GAME_STATES)
+    game_order = models.IntegerField()
