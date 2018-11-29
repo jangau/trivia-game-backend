@@ -2,7 +2,7 @@ from asgiref.sync import async_to_sync
 from channels.generic.websocket import WebsocketConsumer
 import json
 
-from contest.models import GameTeam, DuelGame, Question
+from contest.models import GameTeam, DuelGame, Question, Answer
 
 
 class QuizConsumer(WebsocketConsumer):
@@ -13,7 +13,8 @@ class QuizConsumer(WebsocketConsumer):
             {
                 'type': 'error',
                 'message': message
-        })
+            }
+        )
 
     def connect(self):
         self.accept()
@@ -62,10 +63,7 @@ class QuizConsumer(WebsocketConsumer):
                 return
             removed_categories.append(category)
             game.categories_removed = json.dumps(removed_categories)
-            if game.first_player_turn:
-                game.state = 2
-            else:
-                game.state = 4
+            game.state = 2
             game.save()
             async_to_sync(self.channel_layer.group_send)(
                 'game_master',
@@ -76,6 +74,32 @@ class QuizConsumer(WebsocketConsumer):
                     'game': game.id
                 }
             )
+        elif request_type == 'answer':
+            answer = data.get('answer')  # is 1,2,3,4 corresponding to a,b,c,d
+            question = data.get('question')
+            game_id = data.get('game')
+            try:
+                game = DuelGame.objectsget(id=game_id)
+            except DuelGame.DoesNotExist:
+                self._send_error('Answer received for wrong game id {}'.format(game_id))
+
+            correct = False
+            answer_correct = Answer.objects.get(question__id=question, is_correct=True)
+            if answer_correct.number == answer:
+                if game.first_player_turn == True:
+                    game.first_team_score += 1
+                else:
+                    game.second_team_score += 1
+
+            # Check if game finished
+            if game.get_all_categories_count() == game.get_removed_categories_count():
+                game.state = 5  # Coresponding to finished state
+
+            game.first_player_turn = not game.first_player_turn
+
+            if game.first_player_turn is True:
+                pass
+
         elif request_type == 'register':
             name = data.get('team')
             game_id = data.get('game')
