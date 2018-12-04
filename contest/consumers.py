@@ -86,7 +86,7 @@ class QuizConsumer(WebsocketConsumer):
             correct = False
             answer_correct = Answer.objects.get(question__id=question, is_correct=True)
             if answer_correct.number == answer:
-                if game.first_player_turn == True:
+                if game.first_player_turn is True:
                     game.first_team_score += 1
                 else:
                     game.second_team_score += 1
@@ -206,14 +206,17 @@ class GameMasterConsumer(WebsocketConsumer):
                 )
             if game.state == 1:
                 categories_removed = json.loads(game.categories_removed)
-                categories = {q.category for q in game.session.quiz.question_set.exclude(
-                    category__in=categories_removed
-                )}
+                categories = dict()
+
+                for q in game.session.quiz.question_set.all():
+                    if q.category not in categories.keys():
+                        categories[q.category] = not q.category in categories_removed
+
                 async_to_sync(self.channel_layer.group_send)(
                     'game_master',
                     {
                         'type': 'send.categories',
-                        'categories': list(categories),
+                        'categories': categories,
                         'team': game.first_team.team.name
                     }
                 )
