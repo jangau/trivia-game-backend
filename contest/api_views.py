@@ -10,7 +10,7 @@ from contest.serializers import QuestionSerializer, AnswerSerializer, QuizSerial
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from django.http import Http404
+from django.http import Http404, JsonResponse
 
 from contest.utils import create_duel_games, register_teams
 
@@ -212,4 +212,4 @@ def start_game_session(request):
         }
     )
 
-    return Response('ok')
+    return Response({"status": "ok", "first_game": game1.id})

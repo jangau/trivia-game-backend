@@ -96,6 +96,7 @@ class DuelGame(models.Model):
     second_team_score = models.IntegerField(default=0)
     first_player_turn = models.BooleanField(default=True)
     state = models.IntegerField(default=0, choices=DUEL_GAME_STATES)
+    game_order = models.IntegerField()
 
     def get_all_categories_count(self):
         return len({q.category for q in self.session.quiz.question_set})

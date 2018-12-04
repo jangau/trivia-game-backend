@@ -125,6 +125,16 @@ class QuizConsumer(WebsocketConsumer):
                     'type': 'device_registered',
                     'team': name
                 }))
+                if game.first_team.device_registered and game.second_team.device_registered:
+                    game.state = 1
+                    game.save()
+                    async_to_sync(self.channel_layer.group_send)(
+                        'game_master',
+                        {
+                            'type': 'info',
+                            'message': 'All devices registered, proceed to game start'
+                        }
+                    )
             else:
                 async_to_sync(self.channel_layer.group_send)(
                     'game_master',
@@ -185,15 +195,20 @@ class GameMasterConsumer(WebsocketConsumer):
             # See the state of the game
             game_state = game.state
             if game_state == 0:
-                game.state = 1
-                game.save()
-
+                teams = [game.first_team.team.name, game.second_team.team.name]
+                async_to_sync(self.channel_layer.group_send)(
+                    'players',
+                    {
+                        'type': 'register.devices',
+                        'teams': teams,
+                        'game': game.id
+                    }
+                )
             if game.state == 1:
                 categories_removed = json.loads(game.categories_removed)
                 categories = {q.category for q in game.session.quiz.question_set.exclude(
                     category__in=categories_removed
                 )}
-                game.save()
                 async_to_sync(self.channel_layer.group_send)(
                     'game_master',
                     {
@@ -219,14 +234,6 @@ class GameMasterConsumer(WebsocketConsumer):
                  'message': "Must register {} to {}".format(event.get('teams'),
                                                             event.get('game'))}
                 ))
-        async_to_sync(self.channel_layer.group_send)(
-            'players',
-            {
-                'type': 'register.devices',
-                'teams': event.get('teams'),
-                'game': event.get('game')
-            }
-        )
 
     def send_question(self, event):
         async_to_sync(self.channel_layer.group_send)(
@@ -253,4 +260,9 @@ class GameMasterConsumer(WebsocketConsumer):
     def error(self, event):
         self.send(json.dumps({
             'error': event.get('message')
+        }))
+
+    def info(self, event):
+        self.send(json.dumps({
+            'info': event.get('message')
         }))
