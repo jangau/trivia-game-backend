@@ -61,6 +61,7 @@ class QuizConsumer(WebsocketConsumer):
                 self.send(json.dumps({'type': 'error', 'message': 'category not available'}))
                 self._send_error('Category not found: {}'.format(category))
                 return
+            # TODO: Check which team has selected the category to ensure that they are the selected team
             removed_categories.append(category)
             game.categories_removed = json.dumps(removed_categories)
             game.state = 2
@@ -69,7 +70,7 @@ class QuizConsumer(WebsocketConsumer):
                 'game_master',
                 {
                     'type': 'category.receive',
-                    'team': data.get('name'),
+                    'team': data.get('team'),
                     'category': category,
                     'game': game.id
                 }
@@ -101,6 +102,7 @@ class QuizConsumer(WebsocketConsumer):
                 pass
 
         elif request_type == 'register':
+            # TODO: Asociate unique id with the device
             name = data.get('team')
             game_id = data.get('game')
 
