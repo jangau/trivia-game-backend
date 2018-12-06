@@ -1,3 +1,5 @@
+from random import randint
+
 from asgiref.sync import async_to_sync
 from channels.generic.websocket import WebsocketConsumer
 import json
@@ -46,6 +48,12 @@ class QuizConsumer(WebsocketConsumer):
         elif request_type == 'category':
             category = data.get('category')
             game_id = data.get('game')
+            team_name = data.get('team')
+            try:
+                team = GameTeam.objects.get(team__name=team_name)
+            except GameTeam.DoesNotExist:
+                self._send_error('Category selected by non existing team')
+                return
             try:
                 game = DuelGame.objects.get(id=game_id)
             except DuelGame.DoesNotExist:
@@ -61,9 +69,15 @@ class QuizConsumer(WebsocketConsumer):
                 self.send(json.dumps({'type': 'error', 'message': 'category not available'}))
                 self._send_error('Category not found: {}'.format(category))
                 return
-            # TODO: Check which team has selected the category to ensure that they are the selected team
+            if ((game.first_player_turn and (team.id != game.first_team.id))
+                or (game.first_player_turn is not True and (team.id != game.second_team_id))):
+                self.send(json.dumps({'type': 'error', 'message': 'Wrong team selected category'}))
+                self._send_error('Wrong team selected category')
+                return
+
             removed_categories.append(category)
             game.categories_removed = json.dumps(removed_categories)
+            game.selectedCategory = category
             game.state = 2
             game.save()
             async_to_sync(self.channel_layer.group_send)(
@@ -75,6 +89,7 @@ class QuizConsumer(WebsocketConsumer):
                     'game': game.id
                 }
             )
+
         elif request_type == 'answer':
             answer = data.get('answer')  # is 1,2,3,4 corresponding to a,b,c,d
             question = data.get('question')
@@ -102,9 +117,9 @@ class QuizConsumer(WebsocketConsumer):
                 pass
 
         elif request_type == 'register':
-            # TODO: Asociate unique id with the device
             name = data.get('team')
             game_id = data.get('game')
+            device_id = data.get('device')
 
             try:
                 game = DuelGame.objects.get(id=game_id)
@@ -122,6 +137,7 @@ class QuizConsumer(WebsocketConsumer):
 
             if team == game.first_team or team == game.second_team:
                 team.device_registered = True
+                team.device_unique_id = device_id
                 team.save()
                 self.send(json.dumps({
                     'type': 'device_registered',
@@ -145,6 +161,21 @@ class QuizConsumer(WebsocketConsumer):
                         'message': 'Unknown team attemped register'
                     }
                 )
+        elif request_type == 'connected':
+            device_id = data.get('device')
+
+            try:
+                gt = GameTeam.objects.get(device_id=device_id)
+            except GameTeam.DoesNotExist:
+                pass  # This means no game is started
+
+            # Restore the game state of the device
+            self.send(json.dumps({
+                'type': 'device_reconnect',
+                'device': device_id,
+                'team': gt.team.name,
+                'game': DuelGame.objects.get(session=gt.game_session, game_order=gt.game_session.games_order).id
+            }))
 
     def register_devices(self, event):
         self.send(json.dumps({
@@ -157,7 +188,8 @@ class QuizConsumer(WebsocketConsumer):
         self.send(json.dumps({
             'type': 'question_send',
             'question': event.get('question'),
-            'anwers': event.get('answers')
+            'anwers': event.get('answers'),
+            'team': event.get('team')
         }))
 
     def category_send(self, event):
@@ -206,7 +238,7 @@ class GameMasterConsumer(WebsocketConsumer):
                         'game': game.id
                     }
                 )
-            if game.state == 1:
+            elif game.state == 1:
                 categories_removed = json.loads(game.categories_removed)
                 categories = dict()
 
@@ -220,6 +252,36 @@ class GameMasterConsumer(WebsocketConsumer):
                         'type': 'send.categories',
                         'categories': categories,
                         'team': game.first_team.team.name
+                    }
+                )
+            elif game.state == 2:
+                # Must send the question
+                # First get the available questions
+                questions_removed = json.loads(game.session.questions_removed)
+                category = game.selectedCategory
+                q = Question.objects\
+                    .exclude(id__in=questions_removed)\
+                    .filter(category=category)
+                # See how many questions we can use
+                count = q.count()
+                # Get a random question we can use
+                random_question_index = randint(0, count-1)
+                selected_question = q.all()[random_question_index]
+                # Update the states
+                game.selectedCategory = None
+                questions_removed.append(selected_question.id)
+                session = game.session
+                session.questions_removed = json.dumps(questions_removed)
+                session.save()
+                game.save()
+                # Send the data
+                async_to_sync(self.channel_layer.group_send)(
+                    'game_master',
+                    {
+                        'type': 'send.question',
+                        'question_text': selected_question.question_text,
+                        'answers': [answer.answer_text for answer in Answer.objects.filter(question=selected_question)],
+                        'team': game.first_team_id if game.first_player_turn else game.second_team_id
                     }
                 )
 
@@ -247,7 +309,7 @@ class GameMasterConsumer(WebsocketConsumer):
                 'type': 'question.send',
                 'question': event.get('question_text'),
                 'answers': event.get('answers'),
-                'to': event.get('teams')
+                'team': event.get('team')
             }
         )
 

@@ -78,6 +78,7 @@ class GameTeam(models.Model):
     team = models.ForeignKey(Team, on_delete=models.CASCADE)
     game_session = models.ForeignKey(GameSession, on_delete=models.CASCADE)
     device_registered = models.BooleanField(default=False)
+    device_unique_id = models.CharField(null=True)
 
     class Meta:
         unique_together = (('team', 'game_session'),)
@@ -95,6 +96,7 @@ class DuelGame(models.Model):
                                     related_name='second_team')
     second_team_score = models.IntegerField(default=0)
     first_player_turn = models.BooleanField(default=True)
+    selectedCategory = models.CharField(max_length=100, null=True)
     state = models.IntegerField(default=0, choices=DUEL_GAME_STATES)
     game_order = models.IntegerField()
 
