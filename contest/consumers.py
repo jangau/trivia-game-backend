@@ -50,14 +50,14 @@ class QuizConsumer(WebsocketConsumer):
             game_id = data.get('game')
             team_name = data.get('team')
             try:
-                team = GameTeam.objects.get(team__name=team_name)
-            except GameTeam.DoesNotExist:
-                self._send_error('Category selected by non existing team')
-                return
-            try:
                 game = DuelGame.objects.get(id=game_id)
             except DuelGame.DoesNotExist:
                 self._send_error('Category selected for wrong game id {}'.format(game_id))
+                return
+            try:
+                team = GameTeam.objects.get(team__name=team_name, game_session=game.session)
+            except GameTeam.DoesNotExist:
+                self._send_error('Category selected by non existing team')
                 return
             removed_categories = json.loads(game.categories_removed)
             if category in removed_categories:
@@ -141,8 +141,16 @@ class QuizConsumer(WebsocketConsumer):
                 team.save()
                 self.send(json.dumps({
                     'type': 'device_registered',
-                    'team': name
+                    'team': name,
+                    'device': device_id
                 }))
+                async_to_sync(self.channel_layer.group_send)(
+                    'game_master',
+                    {
+                        'type': 'info',
+                        'message': 'Device {} registered for team {}'.format(device_id, name)
+                    }
+                )
                 if game.first_team.device_registered and game.second_team.device_registered:
                     game.state = 1
                     game.save()
@@ -165,9 +173,12 @@ class QuizConsumer(WebsocketConsumer):
             device_id = data.get('device')
 
             try:
-                gt = GameTeam.objects.get(device_id=device_id)
+                gt = GameTeam.objects.filter(device_unique_id=device_id).order_by("id").last()
             except GameTeam.DoesNotExist:
-                pass  # This means no game is started
+                return  # This means no game is started
+
+            if gt is None:
+                return
 
             # Restore the game state of the device
             self.send(json.dumps({
@@ -188,7 +199,7 @@ class QuizConsumer(WebsocketConsumer):
         self.send(json.dumps({
             'type': 'question_send',
             'question': event.get('question'),
-            'anwers': event.get('answers'),
+            'answers': event.get('answers'),
             'team': event.get('team')
         }))
 
@@ -265,15 +276,13 @@ class GameMasterConsumer(WebsocketConsumer):
                 # See how many questions we can use
                 count = q.count()
                 # Get a random question we can use
-                random_question_index = randint(0, count-1)
+                try:
+                    random_question_index = randint(0, count-1)
+                except ValueError:
+                    self.send(json.dumps({'type': 'error',
+                                          'message': 'no questions'}))
+                    return
                 selected_question = q.all()[random_question_index]
-                # Update the states
-                game.selectedCategory = None
-                questions_removed.append(selected_question.id)
-                session = game.session
-                session.questions_removed = json.dumps(questions_removed)
-                session.save()
-                game.save()
                 # Send the data
                 async_to_sync(self.channel_layer.group_send)(
                     'game_master',
@@ -281,7 +290,7 @@ class GameMasterConsumer(WebsocketConsumer):
                         'type': 'send.question',
                         'question_text': selected_question.question_text,
                         'answers': [answer.answer_text for answer in Answer.objects.filter(question=selected_question)],
-                        'team': game.first_team_id if game.first_player_turn else game.second_team_id
+                        'team': game.first_team.team.name if game.first_player_turn else game.second_team.team.name
                     }
                 )
 

@@ -21,7 +21,7 @@ def create_duel_games(teams, game_session):
             session=game_session,
             first_team=combo[0],
             second_team=combo[1],
-            game_order=idx
+            game_order=idx + 1
         )
         game.save()
         games.append(game)

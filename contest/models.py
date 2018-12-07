@@ -78,7 +78,7 @@ class GameTeam(models.Model):
     team = models.ForeignKey(Team, on_delete=models.CASCADE)
     game_session = models.ForeignKey(GameSession, on_delete=models.CASCADE)
     device_registered = models.BooleanField(default=False)
-    device_unique_id = models.CharField(null=True)
+    device_unique_id = models.CharField(max_length=50, null=True)
 
     class Meta:
         unique_together = (('team', 'game_session'),)
