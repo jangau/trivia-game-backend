@@ -95,9 +95,16 @@ class DuelGame(models.Model):
     second_team = models.ForeignKey(GameTeam, on_delete=models.CASCADE,
                                     related_name='second_team')
     second_team_score = models.IntegerField(default=0)
+    third_team = models.ForeignKey(GameTeam, on_delete=models.CASCADE,
+                                   related_name='third_team', null=True)
+    third_team_score = models.IntegerField(default=0)
     first_player_turn = models.BooleanField(default=True)
-    selectedCategory = models.CharField(max_length=100, null=True)
+    selected_category = models.CharField(max_length=100, null=True)
     state = models.IntegerField(default=0, choices=DUEL_GAME_STATES)
+    answer_count = models.IntegerField(default=0)
+    round_winner = models.CharField(null=True, max_length=50)
+    round_log = models.CharField(max_length=300, default=json.dumps([]))
+    is_final = models.BooleanField(default=False)
     game_order = models.IntegerField()
 
     def get_all_categories_count(self):
