@@ -144,6 +144,8 @@ class QuizConsumer(WebsocketConsumer):
                     self._send_info('Game {} continues'.format(game_id))
 
                 else:
+                    # TODO: Tiebreaker
+
                     # Go to next game
                     session = game.session
                     session.games_order = session.games_order + 1
