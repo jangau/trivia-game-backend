@@ -295,12 +295,15 @@ class QuizConsumer(WebsocketConsumer):
                 return
 
             # Restore the game state of the device
-            self.send(json.dumps({
-                'type': 'device_reconnect',
-                'device': device_id,
-                'team': gt.team.name,
-                'game': DuelGame.objects.get(session=gt.game_session, game_order=gt.game_session.games_order).id
-            }))
+            try:
+                self.send(json.dumps({
+                    'type': 'device_reconnect',
+                    'device': device_id,
+                    'team': gt.team.name,
+                    'game': DuelGame.objects.get(session=gt.game_session, game_order=gt.game_session.games_order).id
+                }))
+            except DuelGame.DoesNotExist:
+                return  # Something might've changed
 
     def register_devices(self, event):
         self.send(json.dumps({
