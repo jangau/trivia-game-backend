@@ -112,12 +112,16 @@ class QuizConsumer(WebsocketConsumer):
                 return
 
             # See if the player who guessed is on his turn
+            if game.state == 5:
+                # If the game is finished, answers will not work
+                self._send_error("Game finished, cannot get any more answers")
+                return
             if game.is_final is False:
-                if game.first_player_turn:
+                if game.first_player_turn and (game.state != 3):
                     if team.team.name != game.first_team.team.name:
                         self._send_error("Wrong team ({}) answered for game{}".format(team.team.name, str(game_id)))
                         return
-                elif team.team.name != game.second_team.team.name:
+                elif team.team.name != game.second_team.team.name and (game.state != 3):
                     self._send_error("Wrong team ({}) answered for game{}".format(team.team.name, str(game_id)))
                     return
 
@@ -136,7 +140,7 @@ class QuizConsumer(WebsocketConsumer):
                     "is" if the_answer.is_correct else "isn't"
                 ))
 
-                if Question.objects.filter(quiz__gamesession=game.session).exclude(category__in=removed_categories).count() > 0:
+                if Question.objects.filter(quiz__gamesession=game.session).exclude(category__in=removed_categories).count() > 1:
                     # We continue the game as categories are available
                     game.state = 1
                     game.first_player_turn = not game.first_player_turn
@@ -144,8 +148,16 @@ class QuizConsumer(WebsocketConsumer):
                     self._send_info('Game {} continues'.format(game_id))
 
                 else:
-                    # TODO: Tiebreaker
+                    # See if we have a tie
+                    if game.first_team_score == game.second_team_score:
+                        # We have a tie, we need to send another question
+                        game.state = 3
+                        game.save()
+                        self._send_info('Game {} is a tie, sending last question'.format(game_id))
+                        return
 
+                    winner = game.first_team if game.first_team_score > game.second_team_score else game.second_team
+                    game.winner = winner
                     # Go to next game
                     session = game.session
                     session.games_order = session.games_order + 1
@@ -157,7 +169,22 @@ class QuizConsumer(WebsocketConsumer):
                         device_registered=False,
                         device_unique_id=None
                     )
-                    self._send_info('Game {} finished'.format(game_id))
+
+                    # See if we are starting the final, to select the players
+                    if DuelGame.objects.get(session=session, game_order=session.games_order).is_final:
+                        # We have a final, let's find the winners of the previous rounds
+                        # First let's get the games
+                        winners = [game.winner for game in DuelGame.objects.filter(session=session, is_final=False)]
+                        if len(winners != 3):
+                            self._send_error("Winners are not 3! (It's {})".format(len(winners)))
+                            return
+                        final = DuelGame.objects.get(sesion=session, is_final=True)
+                        final.first_team = winners[0]
+                        final.second_team = winners[1]
+                        final.third_team = winners[3]
+                        final.save()
+
+                    self._send_info('Game {} finished, winner is {}'.format(game_id, winner.team.name))
             else:
                 if ((team_name != game.first_team.team.name) and
                    (team_name != game.second_team.team.name) and

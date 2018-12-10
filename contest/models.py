@@ -15,6 +15,7 @@ DUEL_GAME_STATES = [
     (0, 'Not started'),
     (1, 'Category'),
     (2, 'Question'),
+    (3, 'Tie'),
     (5, 'Finished')
 ]
 
@@ -24,7 +25,7 @@ class Quiz(models.Model):
     name = models.CharField(max_length=100)
 
     def __str__(self):
-        return self.name
+        return "{}:{}".format(self.id, self.name)
 
 
 class Question(models.Model):
@@ -109,6 +110,8 @@ class DuelGame(models.Model):
     round_log = models.CharField(max_length=300, default=json.dumps([]))
     is_final = models.BooleanField(default=False)
     game_order = models.IntegerField()
+    winner = models.ForeignKey(GameTeam, on_delete=models.CASCADE,
+                               related_name='winner', null=True)
 
     def get_all_categories_count(self):
         return len({q.category for q in self.session.quiz.question_set})
