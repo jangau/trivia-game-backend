@@ -23,6 +23,9 @@ class Quiz(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100)
 
+    def __str__(self):
+        return self.name
+
 
 class Question(models.Model):
     id = models.AutoField(primary_key=True)
@@ -46,8 +49,8 @@ class Answer(models.Model):
                            ('question', 'is_correct'))
 
     def __str__(self):
-        return "Q{}/{}: {}".format(self.question_id,
-                                   self.get_number_display(), self.answer_text[:50])
+        return "Q{}/{}/{}: {}".format(self.question_id, self.is_correct,
+                                      self.get_number_display(), self.answer_text[:50])
 
 
 class Team(models.Model):
