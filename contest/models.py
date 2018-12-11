@@ -112,9 +112,7 @@ class DuelGame(models.Model):
     game_order = models.IntegerField()
     winner = models.ForeignKey(GameTeam, on_delete=models.CASCADE,
                                related_name='winner', null=True)
-
-    class Meta:
-        unique_together = (("game_order", "session"),)
+    correct_answer = models.IntegerField(choices=ANSWER_LABELS, null=True)
 
     def get_all_categories_count(self):
         return len({q.category for q in self.session.quiz.question_set})

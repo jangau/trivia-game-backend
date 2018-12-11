@@ -128,6 +128,15 @@ class QuizConsumer(WebsocketConsumer):
                 # See if next question
                 removed_categories = json.loads(game.categories_removed)
 
+                async_to_sync(self.channel_layer.group_send)(
+                    "game_master",
+                    {
+                        "type": "answer.receive",
+                        "team": team_name,
+                        "answer": answer_number
+                    }
+                )
+
                 # First, update score
                 if the_answer is None:
                     pass
@@ -159,6 +168,7 @@ class QuizConsumer(WebsocketConsumer):
                     # We continue the game as categories are available
                     game.state = 1
                     game.first_player_turn = not game.first_player_turn
+                    game.correct_answer = the_answer.number
                     game.save()
                     self._send_info('Game {} continues'.format(game_id))
 
@@ -220,6 +230,15 @@ class QuizConsumer(WebsocketConsumer):
                     self._send_error("Wrong team answered: {}".format(team_name))
                     return
 
+                async_to_sync(self.channel_layer.group_send)(
+                    "game_master",
+                    {
+                        "type": "answer.receive",
+                        "team": team_name,
+                        "answer": answer_number
+                    }
+                )
+
                 game.answer_count = game.answer_count + 1
 
                 if the_answer is None:
@@ -234,6 +253,7 @@ class QuizConsumer(WebsocketConsumer):
 
                     # Set the round winner so we can
                     game.round_log = json.loads(game.round_log).append('Team {} answered correctly!'.format(team_name))
+                    game.correct_answer = the_answer.number
                     if not game.round_winner:
                         game.round_winner = team
 
@@ -394,6 +414,9 @@ class GameMasterConsumer(WebsocketConsumer):
     def disconnect(self, code):
         async_to_sync(self.channel_layer.group_discard)("game_master", self.channel_name)
 
+    def answer_reveal(self, event):
+        self.send(json.dumps(event))
+
     def receive(self, text_data):
         try:
             data = json.loads(text_data)
@@ -404,7 +427,25 @@ class GameMasterConsumer(WebsocketConsumer):
 
         action_type = data.get('type')
 
-        if action_type == 'duel_game_continue':
+        if action_type == 'reveal_answer':
+            game_id = data.get('game')
+            try:
+                game = DuelGame.objects.get(id=game_id)
+
+            except DuelGame.DoesNotExist:
+                self.send(json.dumps({
+                    'error': 'Game with id {} does not exist'.format(game_id)
+                }))
+                return
+
+            async_to_sync(self.channel_layer.group_send)(
+                'game_master',
+                {
+                    'type': 'answer.reveal',
+                    'answer': game.correct_answer,
+                }
+            )
+        elif action_type == 'duel_game_continue':
             game_id = data.get('game')
             try:
                 game = DuelGame.objects.get(id=game_id)
@@ -524,10 +565,7 @@ class GameMasterConsumer(WebsocketConsumer):
                 )
 
     def answer_receive(self, event):
-        self.send(json.dumps({
-            'team': event.get('team'),
-            'answer': event.get('answer')
-        }))
+        self.send(json.dumps(event))
 
     def category_receive(self, event):
         self.send(json.dumps(event))
@@ -541,6 +579,7 @@ class GameMasterConsumer(WebsocketConsumer):
                 ))
 
     def send_question(self, event):
+        self.send(json.dumps(event))
         async_to_sync(self.channel_layer.group_send)(
             'players',
             {

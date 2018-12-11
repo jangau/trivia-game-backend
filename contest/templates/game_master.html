@@ -1,10 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <title>X-mas quiz app</title>
+    <script src="{{ STATIC_URL }}js/jquery-3.3.1.min.js"></script>
+    <script src="{{ STATIC_URL }}js/bootstrap.js"></script>
+    <script src="{{ STATIC_URL }}js/game-master.js"></script>
+    <link href="{{ STATIC_URL }}css/bootstrap.css" rel="stylesheet">
+    <link href="{{ STATIC_URL }}css/bootstrap-grid.css" rel="stylesheet">
+    <link href="{{ STATIC_URL }}css/game.css" rel="stylesheet">
 </head>
 <body>
-
+    <div class="container" id="containerQuestion">
+        {% include "containers/question.html" %}
+    </div>
+    <div class="col-12" id="containerInfo"></div>
 </body>
 </html>

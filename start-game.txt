@@ -1,1 +1,1 @@
-{"quiz_id": 3, "teams": ["Team 1", "Echipa racheta", "Alta echipa", "#Rezist", "Si inca una", "Trebuie inca 3"]}
+{"quiz_id": 3, "teams": ["Team 1", "Echipa racheta", "Alta echipa", "#Rezist", "Si inca una", "Trebuie inca 4"]}
