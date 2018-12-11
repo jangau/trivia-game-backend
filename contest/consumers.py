@@ -153,12 +153,16 @@ class QuizConsumer(WebsocketConsumer):
                             game.second_team_score += 1
                         else:
                             game.first_team += 1
-                self._send_info('Team {} answered "{}. {}" and {} correct'.format(
-                    team.team.name,
-                    answer_number,
-                    the_answer.answer_text if the_answer else "did not answer",
-                    "is" if the_answer.is_correct else "isn't"
-                ))
+
+                if the_answer is None:
+                    self._send_info('Answer was null')
+                else:
+                    self._send_info('Team {} answered "{}. {}" and {} correct'.format(
+                        team.team.name,
+                        answer_number,
+                        the_answer.answer_text if the_answer else "did not answer",
+                        "is" if the_answer.is_correct else "isn't"
+                    ))
                 categories_left_count = len({q.category for q in Question.objects.filter(
                     quiz__gamesession=game.session
                 ).exclude(
@@ -218,7 +222,7 @@ class QuizConsumer(WebsocketConsumer):
                         final = DuelGame.objects.get(session=session, is_final=True)
                         final.first_team = winners[0]
                         final.second_team = winners[1]
-                        final.third_team = winners[3]
+                        final.third_team = winners[2]
                         final.save()
 
                     self._send_info('Game {} finished, winner is {}'.format(game_id, winner.team.name))
@@ -460,7 +464,7 @@ class GameMasterConsumer(WebsocketConsumer):
             game_state = game.state
             if game_state == 0:
                 if game.is_final:
-                    teams = [game.winner for game in DuelGame.objects.filter(session=game.session, is_final=False)]
+                    teams = [game.winner.team.name for game in DuelGame.objects.filter(session=game.session, is_final=False)]
                 else:
                     teams = [game.first_team.team.name, game.second_team.team.name]
                 async_to_sync(self.channel_layer.group_send)(
@@ -479,13 +483,21 @@ class GameMasterConsumer(WebsocketConsumer):
                     for q in game.session.quiz.question_set.all():
                         if q.category not in categories.keys():
                             categories[q.category] = not q.category in categories_removed
-
+                    send_team = game.first_team.team.name if game.first_player_turn else game.second_team.team.name
                     async_to_sync(self.channel_layer.group_send)(
                         'game_master',
                         {
                             'type': 'send.categories',
                             'categories': categories,
-                            'team': game.first_team.team.name if game.first_player_turn else game.second_team.team.name
+                            'team': send_team
+                        }
+                    )
+                    async_to_sync(self.channel_layer.group_send)(
+                        'players',
+                        {
+                            'type': 'category.send',
+                            'categories': categories,
+                            'to': send_team
                         }
                     )
                 else:
@@ -526,6 +538,16 @@ class GameMasterConsumer(WebsocketConsumer):
                         'type': 'send.question',
                         'question_text': selected_question.question_text,
                         'question_id': selected_question.id,
+                        'answers': {answer.number: answer.answer_text for answer in Answer.objects.filter(question=selected_question)},
+                        'team': game.first_team.team.name if game.first_player_turn else game.second_team.team.name
+                    }
+                )
+                async_to_sync(self.channel_layer.group_send)(
+                    'players',
+                    {
+                        'type': 'question.send',
+                        'question': selected_question.question_text,
+                        'questionID': selected_question.id,
                         'answers': {answer.number: answer.answer_text for answer in Answer.objects.filter(question=selected_question)},
                         'team': game.first_team.team.name if game.first_player_turn else game.second_team.team.name
                     }
@@ -580,27 +602,9 @@ class GameMasterConsumer(WebsocketConsumer):
 
     def send_question(self, event):
         self.send(json.dumps(event))
-        async_to_sync(self.channel_layer.group_send)(
-            'players',
-            {
-                'type': 'question.send',
-                'question': event.get('question_text'),
-                'questionID': event.get('question_id'),
-                'answers': event.get('answers'),
-                'team': event.get('team')
-            }
-        )
 
     def send_categories(self, event):
         self.send(json.dumps(event))
-        async_to_sync(self.channel_layer.group_send)(
-            'players',
-            {
-                'type': 'category.send',
-                'categories': event.get('categories'),
-                'to': event.get('team')
-            }
-        )
 
     def device_unregistered(self, event):
         self.send(json.dumps(event))
