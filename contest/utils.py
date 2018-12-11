@@ -26,4 +26,13 @@ def create_duel_games(teams, game_session):
         game.save()
         games.append(game)
 
+    # Finally, create the final :)
+    final = DuelGame(
+        session=game_session,
+        is_final=True,
+        game_order=idx+2
+    )
+    final.save()
+    games.append(final)
+
     return games[0]

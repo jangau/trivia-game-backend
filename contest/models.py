@@ -94,10 +94,10 @@ class DuelGame(models.Model):
     step = models.IntegerField(default=1)
     categories_removed = models.CharField(max_length=1000, default='[]')
     first_team = models.ForeignKey(GameTeam, on_delete=models.CASCADE,
-                                   related_name='first_team')
+                                   related_name='first_team', null=True)
     first_team_score = models.IntegerField(default=0)
     second_team = models.ForeignKey(GameTeam, on_delete=models.CASCADE,
-                                    related_name='second_team')
+                                    related_name='second_team', null=True)
     second_team_score = models.IntegerField(default=0)
     third_team = models.ForeignKey(GameTeam, on_delete=models.CASCADE,
                                    related_name='third_team', null=True)
@@ -112,6 +112,9 @@ class DuelGame(models.Model):
     game_order = models.IntegerField()
     winner = models.ForeignKey(GameTeam, on_delete=models.CASCADE,
                                related_name='winner', null=True)
+
+    class Meta:
+        unique_together = (("game_order", "session"),)
 
     def get_all_categories_count(self):
         return len({q.category for q in self.session.quiz.question_set})
