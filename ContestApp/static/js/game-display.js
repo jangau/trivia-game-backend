@@ -1,5 +1,5 @@
 $(document).ready(function(){
-    var gameSocket = new WebSocket('ws://127.0.0.1:80/ws/gamemaster/');
+    var gameSocket = new WebSocket('ws://192.168.0.105:80/ws/gamemaster/');
     $("#containerCategories").hide();
     $("#containerQuestion").hide();
     $("#continerInfo").hide();
@@ -61,15 +61,16 @@ $(document).ready(function(){
                 break;
             case "answer.reveal":
                 let correctAnswer = msg.answer;
-                intervalID = setInterval(function(correctAnswer){
-                    let correctAnswerContainer = $("#answer" + correctAnswer.toString());
-                    let originalClasses = correctAnswerContainer.attr('class');
+                let correctAnswerContainer = $("#answer" + correctAnswer.toString());
+                let originalClasses = correctAnswerContainer.attr('class');
+                intervalID = setInterval(function(correctAnswerContainer, originalClasses){
                     correctAnswerContainer.removeClass();
                     correctAnswerContainer.addClass("col answer answer-correct")
                     setTimeout(function(container, theClass){
+                        correctAnswerContainer.removeClass();
                         correctAnswerContainer.addClass(theClass);
                     }, 500, correctAnswerContainer, originalClasses);
-                }, 1100, correctAnswer);
+                }, 1100, correctAnswerContainer, originalClasses);
                 break;
 
         }

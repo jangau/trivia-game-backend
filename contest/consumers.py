@@ -585,6 +585,16 @@ class GameMasterConsumer(WebsocketConsumer):
                         'team': 'all'
                     }
                 )
+                async_to_sync(self.channel_layer.group_send)(
+                    'players',
+                    {
+                        'type': 'question.send',
+                        'question': selected_question.question_text,
+                        'questionID': selected_question.id,
+                        'answers': {answer.number: answer.answer_text for answer in Answer.objects.filter(question=selected_question)},
+                        'team': 'all'
+                    }
+                )
 
     def answer_receive(self, event):
         self.send(json.dumps(event))

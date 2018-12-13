@@ -4,15 +4,20 @@
     <title>X-mas quiz app</title>
     <script src="{{ STATIC_URL }}js/jquery-3.3.1.min.js"></script>
     <script src="{{ STATIC_URL }}js/bootstrap.js"></script>
-    <script src="{{ STATIC_URL }}js/game-master.js"></script>
+    <script src="{{ STATIC_URL }}js/control-pannel.js"></script>
     <link href="{{ STATIC_URL }}css/bootstrap.css" rel="stylesheet">
     <link href="{{ STATIC_URL }}css/bootstrap-grid.css" rel="stylesheet">
     <link href="{{ STATIC_URL }}css/game.css" rel="stylesheet">
 </head>
 <body>
-    <div class="container" id="containerQuestion">
-        {% include "containers/question.html" %}
+    <div class="container-fluid" id="container panel">
+        <div class="row">
+            <a class="btn btn-primary" id="btnConnect">Connect</a>
+            <input type="text" id="gameID">
+            <a class="btn btn-primary" id="btnContinue" style="margin-right: 30px">Continue</a>
+            <a class="btn btn-primary" id="btnReveal">Reveal</a>
+        </div>
+        <div id="dataLog"></div>
     </div>
-    <div class="col-12" id="containerInfo"></div>
 </body>
 </html>
