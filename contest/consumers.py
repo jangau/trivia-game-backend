@@ -1,3 +1,4 @@
+import time
 from random import randint
 
 from asgiref.sync import async_to_sync
@@ -152,7 +153,7 @@ class QuizConsumer(WebsocketConsumer):
                         if team_name == game.first_team.team.name:
                             game.second_team_score += 1
                         else:
-                            game.first_team += 1
+                            game.first_team_score += 1
 
                 if the_answer is None:
                     self._send_info('Answer was null')
@@ -163,6 +164,7 @@ class QuizConsumer(WebsocketConsumer):
                         the_answer.answer_text if the_answer else "did not answer",
                         "is" if the_answer.is_correct else "isn't"
                     ))
+                game.correct_answer = Answer.objects.get(question=question, is_correct=True).number
                 categories_left_count = len({q.category for q in Question.objects.filter(
                     quiz__gamesession=game.session
                 ).exclude(
@@ -172,7 +174,6 @@ class QuizConsumer(WebsocketConsumer):
                     # We continue the game as categories are available
                     game.state = 1
                     game.first_player_turn = not game.first_player_turn
-                    game.correct_answer = the_answer.number
                     game.save()
                     self._send_info('Game {} continues'.format(game_id))
 
@@ -195,13 +196,9 @@ class QuizConsumer(WebsocketConsumer):
                     game.save()
 
                     event = {"type": "unregistered",
-                             "device_id": game.first_team.device_unique_id}
-
-                    event2 = {"type": "unregistered",
-                             "device_id": game.second_team.device_unique_id}
+                             "device_id": "all"}
 
                     async_to_sync(self.channel_layer.group_send)('players', event)
-                    async_to_sync(self.channel_layer.group_send)('players', event2)
 
                     # Reset device status
                     GameTeam.objects.filter(game_session=session).update(
@@ -246,7 +243,8 @@ class QuizConsumer(WebsocketConsumer):
                 game.answer_count = game.answer_count + 1
 
                 if the_answer is None:
-                    game.round_log = json.loads(game.round_log).append('Team {} ran out of time'.format(team_name))
+                    game.round_log = json.dumps(
+                        json.loads(game.round_log).append('Team {} ran out of time'.format(team_name)))
                 elif the_answer.is_correct:
                     if team == game.first_team:
                         game.first_team_score = game.first_team_score + 1
@@ -256,13 +254,16 @@ class QuizConsumer(WebsocketConsumer):
                         game.third_team_score = game.third_team_score + 1
 
                     # Set the round winner so we can
-                    game.round_log = json.loads(game.round_log).append('Team {} answered correctly!'.format(team_name))
+                    game.round_log = json.dumps(
+                        json.loads(game.round_log).append('Team {} answered correctly!'.format(team_name)))
                     game.correct_answer = the_answer.number
                     if not game.round_winner:
-                        game.round_winner = team
-
-                if game.answer_count == 3:
+                        game.round_winner = team.team.name
+                game.save()
+                print("Number of answers: {}".format(game.answer_count))
+                if game.answer_count >= 3:
                     removed_categories = json.loads(game.categories_removed)
+                    game.correct_answer = Answer.objects.get(question=question, is_correct=True).number
                     # Next round
                     if Question.objects.filter(quiz__gamesession=game.session).exclude(category__in=removed_categories).count() > 0:
                         # We continue the game as categories are available
@@ -272,7 +273,7 @@ class QuizConsumer(WebsocketConsumer):
                         self._send_info("Starting next round")
                         game.answer_count = 0
                         game.round_winner = None
-                        game.round_log = None
+                        game.round_log = json.dumps([])
                         game.selected_category = None
                         game.save()
                     else:
@@ -295,6 +296,7 @@ class QuizConsumer(WebsocketConsumer):
                             {'type': 'game.over',
                              'ranking': ranking_final}
                         )
+                        game.save()
         elif request_type == 'register':
             name = data.get('team')
             game_id = data.get('game')
@@ -314,7 +316,7 @@ class QuizConsumer(WebsocketConsumer):
                 self.send('Team or game not found')
                 return
 
-            if team == game.first_team or team == game.second_team:
+            if team == game.first_team or team == game.second_team or team == game.third_team:
                 if team.device_registered is True:
                     event = {"type": "unregistered",
                              "device_id": team.device_unique_id}
@@ -346,7 +348,17 @@ class QuizConsumer(WebsocketConsumer):
                         'message': 'Device {} registered for team {}'.format(device_id, name)
                     }
                 )
-                if game.first_team.device_registered and game.second_team.device_registered:
+                if game.first_team.device_registered and game.second_team.device_registered and not game.is_final:
+                    game.state = 1
+                    game.save()
+                    async_to_sync(self.channel_layer.group_send)(
+                        'game_master',
+                        {
+                            'type': 'info',
+                            'message': 'All devices registered, proceed to game start'
+                        }
+                    )
+                elif game.first_team.device_registered and game.second_team.device_registered and game.third_team.device_registered:
                     game.state = 1
                     game.save()
                     async_to_sync(self.channel_layer.group_send)(
@@ -394,6 +406,7 @@ class QuizConsumer(WebsocketConsumer):
         }))
 
     def question_send(self, event):
+        print("Sending question!")
         self.send(json.dumps({
             'type': 'question_send',
             'question': event.get('question'),
@@ -403,6 +416,7 @@ class QuizConsumer(WebsocketConsumer):
         }))
 
     def category_send(self, event):
+        print("Sending category!")
         self.send(json.dumps(event))
 
     def unregistered(self, event):
@@ -459,7 +473,7 @@ class GameMasterConsumer(WebsocketConsumer):
                     'error': 'Game with id {} does not exist'.format(game_id)
                 }))
                 return
-
+            print (game.state)
             # See the state of the game
             game_state = game.state
             if game_state == 0:
@@ -489,9 +503,14 @@ class GameMasterConsumer(WebsocketConsumer):
                         {
                             'type': 'send.categories',
                             'categories': categories,
-                            'team': send_team
+                            'team': send_team,
+                            'first_team_score': game.first_team_score,
+                            'first_team_name': game.first_team.team.name,
+                            'second_team_score': game.second_team_score,
+                            'second_team_name': game.second_team.team.name
                         }
                     )
+                    time.sleep(0.2)
                     async_to_sync(self.channel_layer.group_send)(
                         'players',
                         {
@@ -501,6 +520,7 @@ class GameMasterConsumer(WebsocketConsumer):
                         }
                     )
                 else:
+                    print(categories_removed)
                     if game.selected_category is None:
                         categories = list({q.category for q in game.session.quiz.question_set.exclude(
                                            category__in=categories_removed)})
@@ -531,7 +551,38 @@ class GameMasterConsumer(WebsocketConsumer):
                                           'message': 'no questions'}))
                     return
                 selected_question = q.all()[random_question_index]
+                session = game.session
+                questions_removed.append(selected_question.id)
+                session.questions_removed = json.dumps(questions_removed)
+                session.save()
                 # Send the data
+                if game.is_final:
+                    async_to_sync(self.channel_layer.group_send)(
+                        'game_master',
+                        {
+                            'type': 'send.question',
+                            'question_text': selected_question.question_text,
+                            'question_id': selected_question.id,
+                            'answers': {answer.number: answer.answer_text for answer in
+                                        Answer.objects.filter(question=selected_question)},
+                            'team': 'all'
+                        }
+                    )
+                    time.sleep(0.2)
+                    async_to_sync(self.channel_layer.group_send)(
+                        'players',
+                        {
+                            'type': 'question.send',
+                            'question': selected_question.question_text,
+                            'questionID': selected_question.id,
+                            'answers': {answer.number: answer.answer_text for answer in
+                                        Answer.objects.filter(question=selected_question)},
+                            'team': 'all'
+                        }
+                    )
+                    print("Sending question to all (final)")
+                    return
+
                 async_to_sync(self.channel_layer.group_send)(
                     'game_master',
                     {
@@ -542,6 +593,7 @@ class GameMasterConsumer(WebsocketConsumer):
                         'team': game.first_team.team.name if game.first_player_turn else game.second_team.team.name
                     }
                 )
+                time.sleep(0.2)
                 async_to_sync(self.channel_layer.group_send)(
                     'players',
                     {
@@ -585,6 +637,7 @@ class GameMasterConsumer(WebsocketConsumer):
                         'team': 'all'
                     }
                 )
+                time.sleep(0.2)
                 async_to_sync(self.channel_layer.group_send)(
                     'players',
                     {
@@ -595,6 +648,21 @@ class GameMasterConsumer(WebsocketConsumer):
                         'team': 'all'
                     }
                 )
+            elif game.state == 5:
+                event = {"type": "unregistered",
+                         "device_id": "all"}
+
+                async_to_sync(self.channel_layer.group_send)('players', event)
+
+                event2 = {"type": "ranking",
+                          "first_team_score": game.first_team_score,
+                          "first_team_name": game.first_team.team.name,
+                          "second_team_score": game.second_team_score,
+                          "second_team_name": game.second_team.team.name}
+                async_to_sync(self.channel_layer.group_send)('game_master', event2)
+
+    def ranking(self, event):
+        self.send(json.dumps(event))
 
     def answer_receive(self, event):
         self.send(json.dumps(event))

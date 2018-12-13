@@ -102,6 +102,10 @@ CHANNEL_LAYERS = {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
             'hosts': [('localhost', 6379)],
+            'channel_capacity': {
+                "players": 2000,
+                "game_master": 500
+            }
         },
     },
 }

@@ -1,5 +1,6 @@
 body {
-    background-color: rgba(255, 208, 19, 0.64);
+    margin-top: 5px;
+    background-color: rgb(255, 255, 255);
 }
 
 .category {
@@ -58,9 +59,9 @@ body {
 }
 
 .category-disabled {
-    color: #4e555b !important;
-    background-color: rgb(170, 170, 110);
-    border-color: rgb(170, 170, 110);
+    color: #000000 !important;
+    background-color: rgb(185, 185, 188);
+    border-color: rgba(74, 134, 147, 0.64);
 }
 
 .category-stub {
